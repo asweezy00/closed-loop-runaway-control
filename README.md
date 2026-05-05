@@ -1,8 +1,4 @@
-# Clean Final Project: Model-Based Runaway Suppression
-
-This folder contains the focused final-project implementation for Challenge E:
-controlled signals suppressing runaway neural activity in a simulated
-excitatory-inhibitory spiking network.
+# Model-Based Runaway Suppression
 
 This is the BME 525 graduate final project codebase for a model-based
 closed-loop detector/controller. The default detector uses an LFP-derived
