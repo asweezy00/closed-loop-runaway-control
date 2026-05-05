@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.matplotlib-cache/
+results/ml_run_quick/
+

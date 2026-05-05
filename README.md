@@ -47,3 +47,19 @@ The runner writes all required code-side project artifacts:
 ```bash
 python -m unittest discover tests
 ```
+
+## ML Extension
+
+A separate machine-learning seizure-like event detector is included in
+`ml_seizure_detection/`. It trains supervised classifiers on simulated LFP
+windows, reports ROC-AUC/PR-AUC metrics, and validates long-record
+false alarms/hour across probability thresholds.
+
+```bash
+../.venv/bin/python -m unittest discover ml_seizure_detection/tests
+../.venv/bin/python ml_seizure_detection/scripts/run_ml.py --out ml_seizure_detection/results/ml_run --seeds 42-51
+```
+
+The most conservative evaluated operating point was threshold `0.82`, which
+gave `0.0` false alarms/hour on five 60 s no-runaway artifact-corrupted
+simulation records while retaining `0.861` held-out window sensitivity.

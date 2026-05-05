@@ -1,0 +1,115 @@
+{
+  "selected_model": "extra_trees",
+  "selected_threshold": 0.1407165327098668,
+  "test_metrics": {
+    "threshold": 0.1407165327098668,
+    "roc_auc": 0.9994018244354719,
+    "pr_auc": 0.9975268695893894,
+    "accuracy": 0.9458288190682557,
+    "sensitivity": 1.0,
+    "specificity": 0.9327052489905787,
+    "precision": 0.782608695652174,
+    "f1": 0.8780487804878049,
+    "tn": 693,
+    "fp": 50,
+    "fn": 0,
+    "tp": 180
+  },
+  "dataset": {
+    "n_windows": 3550,
+    "n_positive_windows": 600,
+    "n_negative_windows": 2950,
+    "n_records": 50,
+    "seeds": [
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51
+    ],
+    "quick": false,
+    "window_s": 0.5,
+    "step_s": 0.05
+  },
+  "model_comparison": [
+    {
+      "model": "logistic_regression",
+      "validation_roc_auc": 0.9299717514124294,
+      "validation_pr_auc": 0.85147038769862,
+      "test_roc_auc_before_refit": 0.9997083894122925,
+      "test_pr_auc_before_refit": 0.9988067597036328
+    },
+    {
+      "model": "random_forest",
+      "validation_roc_auc": 0.9768220338983051,
+      "validation_pr_auc": 0.9108315034108609,
+      "test_roc_auc_before_refit": 0.9989382383729624,
+      "test_pr_auc_before_refit": 0.9955701365288945
+    },
+    {
+      "model": "extra_trees",
+      "validation_roc_auc": 0.9820762711864406,
+      "validation_pr_auc": 0.9228862524754793,
+      "test_roc_auc_before_refit": 0.9996336174667264,
+      "test_pr_auc_before_refit": 0.9984694791677549
+    },
+    {
+      "model": "hist_gradient_boosting",
+      "validation_roc_auc": 0.9766101694915253,
+      "validation_pr_auc": 0.9159083770744878,
+      "test_roc_auc_before_refit": 0.9994616419919247,
+      "test_pr_auc_before_refit": 0.9976773183839913
+    }
+  ],
+  "long_no_runaway_false_alarm_validation": {
+    "threshold": 0.140717,
+    "mean_false_alarms_per_hour": 2592.0,
+    "std_false_alarms_per_hour": 403.3856715353187,
+    "mean_false_alarm_events": 43.2,
+    "n_records": 5
+  },
+  "fa_constrained_operating_point": {
+    "target_false_alarms_per_hour": 60.0,
+    "threshold": 0.64,
+    "test_sensitivity": 0.95,
+    "test_specificity": 0.9959623149394348,
+    "test_precision": 0.9827586206896551,
+    "test_f1": 0.9661016949152542,
+    "test_accuracy": 0.9869989165763814,
+    "test_tp": 171,
+    "test_fp": 3,
+    "test_fn": 9,
+    "test_tn": 740,
+    "mean_false_alarms_per_hour": 60.0,
+    "std_false_alarms_per_hour": 60.0,
+    "mean_false_alarm_events": 1.0,
+    "n_long_records": 5
+  },
+  "required_outputs": {
+    "figures": [
+      "figures/fig1_roc_curve.png",
+      "figures/fig2_precision_recall.png",
+      "figures/fig3_confusion_matrix.png",
+      "figures/fig4_feature_importance.png",
+      "figures/fig5_long_fa_vs_threshold.png",
+      "figures/fig6_long_record_scores.png",
+      "figures/fig7_operating_tradeoff.png"
+    ],
+    "tables": [
+      "tables/feature_importance.csv",
+      "tables/long_record_fa_by_threshold.csv",
+      "tables/long_record_false_alarms.csv",
+      "tables/long_record_predictions.csv",
+      "tables/model_comparison.csv",
+      "tables/operating_thresholds.csv",
+      "tables/test_metrics.csv",
+      "tables/test_predictions.csv",
+      "tables/window_dataset.csv"
+    ]
+  }
+}
