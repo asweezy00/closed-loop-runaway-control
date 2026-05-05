@@ -1,0 +1,359 @@
+\documentclass[12pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{mathptmx}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage[compact]{titlesec}
+
+\captionsetup{font=footnotesize,labelfont=bf,skip=2pt}
+\titlespacing*{\section}{0pt}{0.6em}{0.2em}
+\titlespacing*{\subsection}{0pt}{0.4em}{0.1em}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue
+}
+
+\setlength{\parindent}{0.22in}
+\setlength{\parskip}{0.05em}
+\setlength{\floatsep}{0.25em}
+\setlength{\textfloatsep}{0.25em}
+\setlength{\intextsep}{0.25em}
+\renewcommand{\arraystretch}{1.04}
+\newcommand{\figdir}{../results/core_run/figures}
+
+\title{\textbf{Closed-Loop Detection and Suppression of Runaway Activity in an Excitatory--Inhibitory Spiking Network}}
+\author{Abdullah Shahid\\BME 425/525\\Selected option: Model-based network approach}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Abstract}
+Closed-loop neurostimulation systems are an emerging therapy for drug-resistant focal epilepsy, but their detection and intervention rules must trade sensitivity, specificity, latency, and stimulation burden against one another. We tested whether a simulated event-triggered control rule can detect and suppress seizure-like runaway activity in a Brian2 conductance-based excitatory--inhibitory spiking network of 800 excitatory and 200 inhibitory neurons. Runaway was induced by transiently reducing inhibitory synaptic weights to 30\% of baseline at 2~s of a 4~s simulation. A simulated local-field-potential (LFP) proxy was constructed from recorded synaptic conductances, low-pass filtered at 100~Hz, and z-scored against the pre-induction baseline. A line-length feature in a 250~ms sliding window was thresholded at \(k=4\) baseline standard deviations, and detections triggered safety-limited inhibitory conductance pulses replayed in a second simulation with matched seed. Across ten baseline seeds, closed-loop stimulation reduced LFP power by \(25.1\pm8.7\)\%, excitatory firing rate by \(27.7\pm8.0\)\%, and runaway duration by \(22.9\pm6.8\)\% (mean \(\pm\) SD). The three short stress scenarios (baseline, 10~dB noisy LFP, parameter-shifted network) reported zero false alarms, but a 60~s no-runaway validation with artifact bursts produced \(348\) false alarms per hour at the same operating point, indicating that short-record FA estimates are optimistic. A mixed-record detector benchmark gave a receiver operating characteristic area under the curve (ROC AUC) of 0.86, with line length outperforming 10--40~Hz band power (AUC 0.80) and windowed variance (AUC 0.81). Suppression degraded by approximately half under a 10\% parameter shift in synaptic weights and membrane time constant. The results support the conclusion that controlled inhibitory signals can suppress runaway activity in this model, but the outcome depends on threshold selection, intervention latency, network state, and the time window over which the false-alarm rate is estimated.
+
+\section{Problem Statement and Real-World Relevance}
+Epilepsy is one of the most common serious neurological disorders, and roughly one-third of patients do not achieve seizure freedom on antiepileptic drugs. For this drug-resistant population, closed-loop neurostimulation has emerged as a clinically validated alternative \cite{morrell2011,nair2020}. The engineering question behind such systems can be stated abstractly: a controller must monitor a population-level neural signal, decide whether ongoing activity is transitioning toward a runaway state, and intervene with an inhibitory signal that respects amplitude, charge, and duty-cycle constraints inherited from tissue safety considerations \cite{shannon1992,mccreery1990}. The competing requirements are well known. A sensitive detector catches early runaway activity but tends to over-stimulate; a conservative detector reduces false alarms but may respond too late or miss weaker events; faster intervention improves suppression but complicates implant design \cite{kassiri2024,dumpelmann2019}.
+
+This project asks the question \textbf{can controlled inhibitory signals suppress runaway activity in a network model while respecting detection and stimulation constraints?} It does so in simulation only, using a controlled disinhibition rule as a deliberate proxy for the loss of inhibitory regulation that contributes to seizure-like population activity \cite{maheshwari2014}. The model is intentionally simplified, but the structural decisions it forces---feature selection for the detector, threshold calibration, latency budgets, and safety-bound stimulation---are the same decisions a real device must make. The result is a quantitative testbed in which sensing, decision, intervention, and validation can each be measured and varied independently.
+
+\section{Background and Related Work}
+\textbf{Network dynamics and seizure induction.} Sparsely connected networks of excitatory and inhibitory leaky integrate-and-fire neurons exhibit a rich repertoire of states whose boundaries depend on the balance between recurrent excitation, inhibition, and external drive \cite{brunel2000}, making them a natural framework for studying transitions from stable baseline activity to pathological synchronization \cite{maheshwari2014}. The induction protocol used here---transient reduction of inhibitory synaptic weights---is a controlled analog of disinhibition mechanisms proposed for several seizure types \cite{maheshwari2014}.
+
+\textbf{LFP modeling.} Real closed-loop systems sense extracellular field potentials rather than individual synaptic variables. Local field potentials reflect summed transmembrane and synaptic currents and require explicit modeling assumptions \cite{einevoll2013}; prior computational work has used excitatory--inhibitory networks to relate synaptic activity and LFP spectra \cite{mazzoni2008}. The weighted-conductance proxy used here is a simplified signal rather than a physically accurate forward model, but provides the population-level sensing channel the detector requires.
+
+\textbf{Detection features.} Line length---the windowed mean absolute first difference of the signal---was introduced as an efficient feature for seizure onset detection in intracranial EEG \cite{esteller2001} and validated against alternative features and machine-learning detectors \cite{guo2010,dumpelmann2019}. Frequency-domain (band power) and statistical (variance, entropy) features are also commonly used \cite{kassiri2024}. We compare line length against 10--40~Hz band power and windowed variance on the same mixed-record benchmark.
+
+\textbf{Closed-loop neurostimulation.} The clinical analog is responsive neurostimulation, in which an implanted device monitors electrocorticographic activity and stimulates when abnormal patterns are detected \cite{morrell2011,nair2020,sisterson2020}. Recent reviews argue that therapeutic efficacy is better described as long-term modulation of seizure networks than per-event interruption \cite{sisterson2020}, and that next-generation devices must trade detection latency, energy efficiency, and inter-patient variability \cite{kassiri2024,dumpelmann2019}. On the experimental side, on-demand optogenetic activation of specific inhibitory pathways can attenuate hippocampal seizures in animal models \cite{streng2021}. The present work is a model-based testbed motivated by these systems, not a clinical or biological intervention.
+
+\section{Methods}
+The control system has three functional stages---sensing, decision, intervention (Figure~\ref{fig:block})---and is implemented as event-triggered replay rather than a fully online detector. For each controlled trial the network is first simulated without stimulation; detections are computed from the LFP proxy; requested stimulation times are passed through the safety controller; and the same seed is re-run with those stimulation times applied. This preserves the sense--decide--intervene structure while keeping the simulator stable and reproducible. A fully online detector implemented as a Brian2 \texttt{network\_operation} is left as future work.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth]{\figdir/fig1_block_diagram.png}
+    \caption{\textbf{Closed-loop block diagram.} The simulated network generates spikes and synaptic conductances. A subset of excitatory neurons is used to construct an LFP proxy. The detector computes line length and compares it with a baseline threshold. When a detection occurs, the controller schedules a safety-limited inhibitory pulse train, which is applied during a replayed simulation with matched seed.}
+    \label{fig:block}
+\end{figure}
+
+\subsection{Spiking network model}
+The primary model is a Brian2 \cite{stimberg2019} conductance-based excitatory--inhibitory spiking network with \(N_E=800\) excitatory and \(N_I=200\) inhibitory neurons connected sparsely with probability \(\epsilon=0.1\). The simulation lasts \(T=4\)~s with a time step of 0.1~ms; recorded variables are sampled at 1~ms resolution. The 0--2~s interval is the baseline window. At \(t=2\)~s, inhibitory synaptic weights are reduced to 30\% of their baseline value for 1~s, after which they return to baseline.
+
+Membrane dynamics follow a conductance-based integrate-and-fire form,
+\begin{equation}
+C_m \frac{dv}{dt}
+= g_L(E_L-v) + g_E(E_E-v) + g_I(E_I-v) + g_{\mathrm{stim}}(E_I-v),
+\end{equation}
+with \(C_m=200\)~pF, \(g_L=C_m/\tau_m\), membrane time constant \(\tau_m=20\)~ms, leak reversal \(E_L=-60\)~mV, excitatory reversal \(E_E=0\)~mV, inhibitory reversal \(E_I=-80\)~mV. Neurons spike when \(v>-50\)~mV, reset to \(-60\)~mV, and observe a 2~ms refractory period. Synaptic conductances decay exponentially with \(\tau_E=5\)~ms and \(\tau_I=10\)~ms. Baseline weights are \(w_E=0.6\)~nS and \(w_I=6.7\)~nS. External input is Poisson at 1400~Hz with weight 0.6~nS, applied independently to each neuron.
+
+\subsection{LFP proxy}
+The detector senses a simulated LFP proxy constructed from synaptic conductances recorded from \(N_R=50\) excitatory neurons:
+\begin{equation}
+\mathrm{LFP}_{\mathrm{raw}}(t)
+= \alpha \sum_{j=1}^{N_R} g_{E,j}(t) + \beta \sum_{j=1}^{N_R} g_{I,j}(t),
+\quad
+\alpha=1.0,\ \beta=-1.65.
+\end{equation}
+The negative inhibitory weight reflects the opposite-polarity contribution that excitatory and inhibitory synaptic currents make to a field-potential-like signal \cite{einevoll2013,mazzoni2008}. The raw proxy is low-pass filtered at 100~Hz with a fourth-order Butterworth filter (second-order section form, causal forward filtering) and then z-scored using the pre-induction baseline,
+\begin{equation}
+\mathrm{LFP}_{z}(t) = \frac{\mathrm{LFP}(t)-\mu_{\mathrm{base}}}{\sigma_{\mathrm{base}}+10^{-12}}.
+\end{equation}
+
+\subsection{Detector}
+The detector feature is line length in a 250~ms window updated every 10~ms. For a window containing samples \(x_1,\ldots,x_N\),
+\begin{equation}
+\mathrm{LL} = \frac{1}{N-1}\sum_{i=2}^{N}|x_i-x_{i-1}|.
+\end{equation}
+The threshold is defined from baseline feature statistics,
+\begin{equation}
+\theta_k = \mu_{\mathrm{LL,base}} + k\,\sigma_{\mathrm{LL,base}}.
+\end{equation}
+The default closed-loop threshold is \(k=4\). To suppress single-sample crossings the detector requires the feature to remain above threshold for 50~ms (5 consecutive samples) and enforces a 200~ms cooldown after each detection. To evaluate threshold sensitivity, a benchmark sweeps \(k\) from 1.5 to 8.0 in steps of 0.25.
+
+Two detector evaluations are reported. First, the closed-loop stress tests evaluate the detector under the three primary scenarios. Second, a mixed-record benchmark includes (i) strong runaway records, (ii) weak runaway records (inhibitory factor 0.50 instead of 0.30), (iii) clean no-runaway records, and (iv) no-runaway records with synthetic 25--35~Hz artifact bursts. The same benchmark is repeated for line length, 10--40~Hz band power, and windowed variance. The closed-loop control experiments use line length as the operating feature.
+
+\subsection{Intervention rule and safety constraints}
+When the detector crosses threshold, the controller delivers a brief inhibitory conductance pulse to a randomly selected fraction of excitatory neurons. The pulse appears as the term \(g_{\mathrm{stim}}(E_I-v)\) in the membrane equation, which drives targeted neurons toward the inhibitory reversal potential. The intervention is simulation-only and is never applied to human or animal subjects. The numerical caps below are model units chosen to demonstrate that the controller respected explicit limits; they should not be interpreted as device-ready safety bounds.
+
+\begin{itemize}
+    \item maximum pulse amplitude: 50~nS
+    \item pulse duration: 100~ms
+    \item target fraction: 50\% of excitatory neurons
+    \item maximum number of pulses per trial: 5
+    \item minimum pulse spacing: 200~ms
+    \item maximum duty cycle: 15\%
+\end{itemize}
+
+Stimulation burden is reported in conductance--time units, $\mathrm{nS}\cdot\mathrm{s}$, computed from the safety-filtered pulse schedule.
+
+\subsection{Validation scenarios and metrics}
+Summary statistics use seeds 42--51. Seed 42 is used for representative plots. Three runaway stress scenarios are evaluated:
+\begin{itemize}
+    \item \textbf{Baseline} model;
+    \item \textbf{Noisy LFP} with 10~dB Gaussian measurement noise added to the proxy;
+    \item \textbf{Parameter shifted} model with \(w_E\) increased by 10\%, \(w_I\) decreased by 10\%, and \(\tau_m\) increased by 10\%.
+\end{itemize}
+A fourth long no-runaway validation runs the network with no inhibitory weight reduction across five seeds for 60~s each, with randomized 25--35~Hz artifact bursts injected at an average rate of 10/min. Detections in this record are by construction false alarms.
+
+Detection metrics are sensitivity, false alarms per hour, and detection latency relative to runaway onset. Suppression metrics compare closed-loop against open-loop activity in the post-onset window:
+\begin{equation}
+\mathrm{Suppression}\,\% = 100 \times \frac{\mathrm{open\ loop} - \mathrm{closed\ loop}}{\mathrm{open\ loop}}.
+\end{equation}
+Variants are computed for LFP power (mean square of \(\mathrm{LFP}_z\)), excitatory firing rate, and runaway duration (time during which the smoothed E-rate exceeds the baseline mean plus three baseline standard deviations).
+
+\section{Results}
+
+\subsection{The network entered a runaway state after disinhibition}
+The baseline model was stable during the first 2~s, then transitioned into a higher-activity state after inhibitory weights were reduced (Figure~\ref{fig:runaway}). The raster and population-rate traces show a sustained increase in excitatory firing during the induction window, while the LFP proxy increased in amplitude. This confirms the network can be driven from a stable baseline regime into a runaway state by the disinhibition protocol.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth,height=0.30\textheight,keepaspectratio]{\figdir/fig2_runaway_example.png}
+    \caption{\textbf{Baseline-to-runaway transition (representative seed 42, open loop).} Top: excitatory spike raster (E neuron index vs.\ time). Middle: smoothed excitatory population rate (Hz). Bottom: baseline-normalized LFP proxy (z-units). Shaded interval indicates the 2--3~s induction window during which inhibitory synaptic weights are reduced to 30\% of baseline.}
+    \label{fig:runaway}
+\end{figure}
+
+\subsection{Line length detected runaway onset}
+The line-length feature rose sharply after runaway onset and crossed the baseline-derived threshold within tens of milliseconds (Figure~\ref{fig:detector}). At the operating threshold \(k=4\), the representative detection latency was 79~ms; the across-seed mean for the baseline scenario was 76~ms. This is short relative to the 1~s induced runaway interval, allowing the controller to intervene while the event is still developing.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth,height=0.28\textheight,keepaspectratio]{\figdir/fig3_detector_trace.png}
+    \caption{\textbf{Detector feature trace and threshold (representative seed 42).} Top: LFP proxy in z-units vs.\ time, with the induction window shaded and detection times marked. Bottom: line-length feature (z-units per sample) computed in a 250~ms sliding window, with the baseline-derived threshold (\(\mu_{\mathrm{LL,base}}+4\sigma_{\mathrm{LL,base}}\)) marked.}
+    \label{fig:detector}
+\end{figure}
+
+\subsection{Threshold and feature choice control detection tradeoffs}
+Threshold choice strongly affected detector behavior on the mixed-record benchmark (Figure~\ref{fig:performance}). Line length yielded a ROC AUC of 0.86, indicating useful but imperfect separation between runaway and non-runaway records. Low thresholds (e.g., \(k=1.5\)) achieved sensitivity 1.00 but a false-positive rate of 0.95. Higher thresholds increased specificity at the cost of recall: at \(k=5.75\), sensitivity dropped to 0.60 but precision climbed to 0.92. The latency--false-alarm panel shows that aggressive operating points pay for early detection with sustained false-alarm burden.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\linewidth,height=0.22\textheight,keepaspectratio]{\figdir/fig4_detector_performance.png}
+    \caption{\textbf{Detector performance across threshold values (line length).} Left: ROC-style curve (false positive rate vs.\ sensitivity) with operating points coloured by threshold \(k\). Centre: precision--recall tradeoff. Right: detection latency (ms) against false alarms per hour. Markers labelled \(k=2,3,4,6,8\) for orientation.}
+    \label{fig:performance}
+\end{figure}
+
+The same benchmark repeated for line length, 10--40~Hz band power, and windowed variance shows that line length had the highest AUC, with variance and band power tied behind it (Figure~\ref{fig:featurecompare}). The margin (0.06 AUC over band power, 0.05 over variance) is small relative to seed-to-seed variability and should not be interpreted as a statistically significant separation; the claim supported by the data is the weaker one that line length is at least as good as the alternatives on this benchmark and is the simplest to compute, justifying its use as the default operating feature.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.92\linewidth,height=0.22\textheight,keepaspectratio]{\figdir/fig4b_feature_comparison.png}
+    \caption{\textbf{Detector feature comparison on the mixed-record benchmark.} Left: ROC-style curves for line length, 10--40~Hz band power, and windowed variance (legend reports per-feature AUC). Centre: precision--recall comparison. Right: false alarms per hour vs.\ threshold \(k\).}
+    \label{fig:featurecompare}
+\end{figure}
+
+\subsection{Closed-loop pulses suppressed runaway activity}
+Closed-loop inhibitory pulses reduced runaway activity compared with open-loop simulation (Figure~\ref{fig:suppression}). In the representative seed-42 trial, the detector triggered five pulses, the controller respected the 50~nS amplitude cap and produced a duty cycle of 12.5\% (within the 15\% cap), and LFP power, excitatory rate, and runaway duration each dropped by approximately 26--30\%. Across the ten baseline seeds, mean reductions were \(25.1\pm8.7\)\% (LFP power), \(27.7\pm8.0\)\% (E-rate), and \(22.9\pm6.8\)\% (runaway duration). The closed-loop trace did not eliminate all abnormal activity; instead, it shortened and attenuated the runaway episode \cite{sisterson2020}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth,height=0.32\textheight,keepaspectratio]{\figdir/fig5_closed_loop_suppression.png}
+    \caption{\textbf{Open-loop versus closed-loop runaway activity.} Panels 1--3 show the representative seed 42: LFP proxy z-trace, smoothed excitatory population rate, and the safety-filtered stim pulse schedule. Panel 4 shows mean closed-loop suppression with across-seed standard-deviation error bars (n=10 baseline seeds) for LFP power, excitatory firing rate, and runaway duration.}
+    \label{fig:suppression}
+\end{figure}
+
+\subsection{Intervention latency reduces suppression}
+Adding delay between detection and stimulation degraded suppression in a graded fashion (Figure~\ref{fig:latency}). With no added delay, mean LFP-power suppression across seven baseline seeds was 27.4\% \(\pm\) 5.5 (SD); with 100~ms added delay it was essentially unchanged (27.0\%); with 250~ms it fell to 21.4\%; and with 500~ms it dropped to 14.4\%. The accepted-pulses count was effectively unchanged across the latency sweep, confirming that the degradation is due to late intervention rather than lost pulses. The engineering implication is that detection and stimulation timing are part of the controller: a correct decision is less effective if intervention arrives late \cite{kassiri2024,dumpelmann2019}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth,height=0.24\textheight,keepaspectratio]{\figdir/fig6_latency_sensitivity.png}
+    \caption{\textbf{Sensitivity to intervention latency (mean \(\pm\) SD across n=7 baseline seeds).} Lines show LFP power and excitatory rate suppression (\%) vs.\ added intervention latency (ms); shaded bands show across-seed SD. The right axis shows mean accepted pulses per trial, which is approximately constant.}
+    \label{fig:latency}
+\end{figure}
+
+\subsection{Stress testing exposed parameter-shift weakness and a non-trivial long-record false-alarm rate}
+Table~\ref{tab:stress} summarizes the three short stress scenarios plus the long no-runaway validation. Suppression was preserved under 10~dB measurement noise (latency rose from 76 to 84~ms but no false alarms appeared in the short runs). The parameter-shifted model exposed a real limitation: sensitivity remained 1.000 but suppression dropped to roughly one-third of baseline (\(\sim\)9.8\% LFP, \(\sim\)9.9\% E-rate, \(\sim\)6.1\% duration), because the more excitation-dominated network receives proportionally less inhibitory drive from the same fixed pulse rule. The long no-runaway row reframes the false-alarm story: at \(k=4\) the detector produced a mean of 348 FA/h across five 60~s artifact-corrupted records. The safety filter capped this at an average of 4.8 accepted pulses per record (duty 0.008, burden 12.0~$\mathrm{nS}\cdot\mathrm{s}$); the burden is small in absolute terms because the pulse-count cap is binding, and would scale with record length and artifact density. The correct claim is therefore zero false alarms in the short runaway scenarios but 348 FA/h in the long no-runaway artifact validation.
+
+\begin{table}[H]
+\centering
+\caption{\textbf{Stress-test and long false-alarm summary.} Values are means across runs (\(n\) varies by scenario; baseline/noisy/shifted use 10 seeds, long no-runaway uses 5 seeds). Suppression metrics compare closed-loop to open-loop in runaway scenarios. The long no-runaway row reports detector false alarms and the stimulation burden the safety filter would have allowed; suppression and latency are not applicable because no runaway was induced.}
+\label{tab:stress}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccccccccc}
+\toprule
+Scenario & Sens. & FA/h & Lat.\ ms & LFP \% & E-rate \% & Dur.\ \% & Pulses & Duty & Burden \\
+\midrule
+Baseline           & 1.000 & 0.000   & 76.0 & 25.06 & 27.72 & 22.86 & 4.50 & 0.113 & 11.25 \\
+Noisy LFP 10 dB    & 1.000 & 0.000   & 84.0 & 25.35 & 27.80 & 23.37 & 4.40 & 0.110 & 11.00 \\
+Parameter shifted  & 1.000 & 0.000   & 76.0 &  9.80 &  9.89 &  6.06 & 2.10 & 0.053 &  5.25 \\
+Long no-runaway    & n/a   & 348.0   & n/a  & n/a   & n/a   & n/a   & 4.80 & 0.008 & 12.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A representative long no-runaway record (Figure~\ref{fig:longfa}) shows seven false detections in 60~s at \(k=4\) (420 FA/h for seed 42); across-seed mean was 348 FA/h with SD \(\approx 100\) FA/h, and the FA-vs-\(k\) sweep approaches zero by \(k>7\) (full sweep saved as \texttt{fig8\_long\_fa\_vs\_k.png}). This demonstrates that 4~s simulations provide too short a denominator for an honest FA-per-hour estimate.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.72\linewidth,height=0.22\textheight,keepaspectratio]{\figdir/fig7_long_record_fa.png}
+    \caption{\textbf{Long no-runaway false-alarm validation (representative seed 42).} Top: 60~s LFP proxy z-trace with artifact bursts shaded and false detections marked. Bottom: line-length feature trace with the same shading, the \(k=4\) threshold, and false-detection markers.}
+    \label{fig:longfa}
+\end{figure}
+
+\section{Discussion}
+
+\subsection{Answer to the project question}
+The results support a conditional yes: \textbf{controlled inhibitory signals can suppress runaway activity in this simulated excitatory--inhibitory network, but the magnitude of suppression depends on the detector threshold, intervention latency, the network's parameter regime, and the time window over which the false-alarm rate is estimated.} The strongest evidence is the across-seed open- vs.\ closed-loop comparison, which showed roughly 25--28\% reductions in LFP power and excitatory firing rate and 23\% reduction in runaway duration across ten baseline seeds. Suppression was preserved under 10~dB measurement noise but degraded sharply under a 10\% parameter shift. The detector's apparent perfect specificity in the short stress runs did not survive a 60~s no-runaway artifact-corrupted validation, which gave 348 false alarms per hour at the same operating point.
+
+\subsection{Interpretation, safety, and ethics}
+The system works because the line-length feature senses a population-level change soon after disinhibition begins; once the feature crosses threshold, the safety controller schedules inhibitory pulses that drive a fraction of excitatory neurons toward the inhibitory reversal potential. The intervention does not reverse the network manipulation itself---inhibitory weights remain at 30\% of baseline during the induction window---which is why suppression is partial. This matches the framing in clinical studies that argue closed-loop neurostimulation works through long-term modulation of seizure networks rather than per-event interruption \cite{sisterson2020,kokkinos2019,nair2020}. The threshold story has two layers: in the short runaway scenarios, \(k=4\) produced no false alarms because the only event in those records was the induced runaway; in the mixed-record benchmark and the long no-runaway validation the same threshold revealed a real false-alarm rate, and precision and FA/h became the binding metrics \cite{esteller2001,guo2010,dumpelmann2019,kassiri2024}. The intervention was simulation-only and the controller respected explicit limits inspired by tissue-safety considerations \cite{shannon1992,mccreery1990}; the numerical caps are model units, not clinical charge-per-phase values, and should not be interpreted as device-ready safety bounds \cite{kassiri2024}.
+
+\subsection{Limitations and failure modes}
+The induction model is a controlled disinhibition rule rather than a biologically detailed seizure mechanism \cite{maheshwari2014}; the LFP proxy is a weighted sum of synaptic conductances rather than a forward-modelled extracellular potential \cite{einevoll2013}; the 60~s no-runaway validation is much shorter than the multi-day records needed for clinical-grade FA/h claims; the implementation is event-triggered replay rather than a fully online detector; the controller uses fixed threshold and intervention parameters and does not adapt to baseline drift; and on-demand inhibitory interventions do not always work even in well-controlled biological preparations, limiting the simulation-to-biology argument. Failure modes follow directly: too-low thresholds over-stimulate on artifacts; too-high thresholds miss weak events; latency above approximately 250~ms degrades suppression sharply; parameter shifts toward excitation reduce control effectiveness; and short false-alarm denominators make the operating point look better than it truly is.
+
+\subsection{Next steps}
+Priority extensions: longer no-runaway records (hours rather than minutes) for tighter FA/h estimates, a fully online Brian2 detector to replace event-triggered replay, an adaptive baseline-tracker that responds to slow signal drift without becoming hypersensitive, and an adaptive intervention rule that scales pulse amplitude or count with the line-length excursion under the same hard safety caps---the last would likely recover parameter-shifted suppression but shifts scope toward adaptive controller optimization.
+
+\clearpage
+\appendix
+\section{Code Documentation Appendix and Shared Materials}
+The clean final implementation is located at \texttt{/Users/abdullah/Desktop/brain\_research\_test/final\_project}.
+
+The main runner is:
+\begin{quote}
+\small\texttt{python scripts/run\_core.py --out results/core\_run --seeds 42-51}
+\end{quote}
+
+The test command is:
+\begin{quote}
+\small\texttt{python -m unittest discover tests}
+\end{quote}
+
+The code is organized into focused modules: \texttt{network.py} (Brian2 E/I simulation and runaway induction), \texttt{lfp.py} (conductance-derived LFP proxy and noise/artifact injection), \texttt{detector.py} (line length, alternative features, threshold and detection logic), \texttt{controller.py} (safety-limited pulse scheduling), \texttt{metrics.py} (detection scoring and suppression metrics), \texttt{experiments.py} (trial orchestration and benchmark assembly), and \texttt{plotting.py} (figure generation). The unit-test suite (9 tests) covers detector behavior on flat and synthetic-runaway inputs, controller spacing/duty enforcement, end-to-end metrics finiteness across all three stress scenarios, ROC-AUC behavior on synthetic separable and shuffled inputs, true-positive vs.\ false-positive scoring for misplaced detection times, and a directional regression assertion that seed-42 baseline LFP suppression is at least 20\%.
+
+Generated outputs are written to \texttt{results/core\_run/}. Figures: \texttt{fig1\_block\_diagram.png}, \texttt{fig2\_runaway\_example.png}, \texttt{fig3\_detector\_trace.png}, \texttt{fig4\_detector\_performance.png}, \texttt{fig4b\_feature\_comparison.png}, \texttt{fig5\_closed\_loop\_suppression.png}, \texttt{fig6\_latency\_sensitivity.png}, \texttt{fig7\_long\_record\_fa.png}, \texttt{fig8\_long\_fa\_vs\_k.png}. Tables: \texttt{table1\_stress\_summary.csv/.md}, \texttt{trial\_summary.csv}, \texttt{threshold\_sweep.csv}, \texttt{detector\_benchmark.csv}, \texttt{feature\_benchmark.csv}, \texttt{latency\_sensitivity.csv}, \texttt{long\_baseline\_false\_alarms.csv}, \texttt{long\_baseline\_fa\_by\_k.csv}.
+
+Seeds 42--51 are used for summary statistics. Seed 42 is used for representative single-seed plots. The latency sweep was run across baseline seeds 42--48; figures showing across-seed uncertainty annotate the seed count in the title or caption.
+
+\clearpage
+
+\begin{thebibliography}{16}
+
+\bibitem{brunel2000}
+Brunel, N. (2000).
+Dynamics of sparsely connected networks of excitatory and inhibitory spiking neurons.
+\textit{Journal of Computational Neuroscience}, 8, 183--208.
+\url{https://doi.org/10.1023/A:1008925309027}
+
+\bibitem{einevoll2013}
+Einevoll, G. T., Kayser, C., Logothetis, N. K., and Panzeri, S. (2013).
+Modelling and analysis of local field potentials for studying the function of cortical circuits.
+\textit{Nature Reviews Neuroscience}, 14, 770--785.
+\url{https://doi.org/10.1038/nrn3599}
+
+\bibitem{mazzoni2008}
+Mazzoni, A., Panzeri, S., Logothetis, N. K., and Brunel, N. (2008).
+Encoding of naturalistic stimuli by local field potential spectra in networks of excitatory and inhibitory neurons.
+\textit{PLoS Computational Biology}, 4(12), e1000239.
+\url{https://doi.org/10.1371/journal.pcbi.1000239}
+
+\bibitem{esteller2001}
+Esteller, R., Echauz, J., Tcheng, T., Litt, B., and Pless, B. (2001).
+Line length: an efficient feature for seizure onset detection.
+\textit{Proceedings of the 23rd Annual International Conference of the IEEE Engineering in Medicine and Biology Society}.
+\url{https://doi.org/10.1109/IEMBS.2001.1020545}
+
+\bibitem{guo2010}
+Guo, L., Rivero, D., Dorado, J., Rabu\~{n}al, J. R., and Pazos, A. (2010).
+Automatic epileptic seizure detection in EEGs based on line length feature and artificial neural networks.
+\textit{Journal of Neuroscience Methods}, 191(1), 101--109.
+\url{https://doi.org/10.1016/j.jneumeth.2010.05.020}
+
+\bibitem{morrell2011}
+Morrell, M. J. and the RNS System in Epilepsy Study Group. (2011).
+Responsive cortical stimulation for the treatment of medically intractable partial epilepsy.
+\textit{Neurology}, 77(13), 1295--1304.
+\url{https://doi.org/10.1212/WNL.0b013e3182302056}
+
+\bibitem{nair2020}
+Nair, D. R., Laxer, K. D., Weber, P. B., Murro, A. M., Park, Y. D., Barkley, G. L., et al. (2020).
+Nine-year prospective efficacy and safety of brain-responsive neurostimulation for focal epilepsy.
+\textit{Neurology}, 95(9), e1244--e1256.
+\url{https://doi.org/10.1212/WNL.0000000000010154}
+
+\bibitem{kokkinos2019}
+Kokkinos, V., Sisterson, N. D., Wozny, T. A., and Richardson, R. M. (2019).
+Association of closed-loop brain stimulation neurophysiological features with seizure control among patients with focal epilepsy.
+\textit{JAMA Neurology}, 76(7), 800--808.
+\url{https://doi.org/10.1001/jamaneurol.2019.0658}
+
+\bibitem{sisterson2020}
+Sisterson, N. D. and Kokkinos, V. (2020).
+Neuromodulation of epilepsy networks.
+\textit{Neurosurgery Clinics of North America}, 31(3), 459--470.
+\url{https://doi.org/10.1016/j.nec.2020.03.009}
+
+\bibitem{kassiri2024}
+Kassiri, H., Muneeb, A., Salahi, R., and Dabbaghian, A. (2024).
+Closed-loop implantable neurostimulators for individualized treatment of intractable epilepsy: a review of recent developments, ongoing challenges, and future opportunities.
+\textit{IEEE Transactions on Biomedical Circuits and Systems}, 18(6), 1268--1295.
+\url{https://doi.org/10.1109/TBCAS.2024.3456825}
+
+\bibitem{dumpelmann2019}
+D\"umpelmann, M. (2019).
+Early seizure detection for closed loop direct neurostimulation devices in epilepsy.
+\textit{Journal of Neural Engineering}, 16(4), 041001.
+\url{https://doi.org/10.1088/1741-2552/ab094a}
+
+\bibitem{maheshwari2014}
+Maheshwari, A. and Noebels, J. L. (2014).
+Monogenic models of absence epilepsy: windows into the complex balance between inhibition and excitation in thalamocortical microcircuits.
+\textit{Progress in Brain Research}, 213, 223--252.
+\url{https://doi.org/10.1016/B978-0-444-63326-2.00012-0}
+
+\bibitem{streng2021}
+Streng, M. L., Tetzlaff, M. R., and Krook-Magnuson, E. (2021).
+Distinct fastigial output channels and their impact on temporal lobe seizures.
+\textit{Journal of Neuroscience}, 41(49), 10091--10107.
+\url{https://doi.org/10.1523/JNEUROSCI.0683-21.2021}
+
+\bibitem{shannon1992}
+Shannon, R. V. (1992).
+A model of safe levels for electrical stimulation.
+\textit{IEEE Transactions on Biomedical Engineering}, 39(4), 424--426.
+\url{https://doi.org/10.1109/10.126616}
+
+\bibitem{mccreery1990}
+McCreery, D. B., Agnew, W. F., Yuen, T. G. H., and Bullara, L. (1990).
+Charge density and charge per phase as cofactors in neural injury induced by electrical stimulation.
+\textit{IEEE Transactions on Biomedical Engineering}, 37(10), 996--1001.
+\url{https://doi.org/10.1109/10.102812}
+
+\bibitem{stimberg2019}
+Stimberg, M., Brette, R., and Goodman, D. F. M. (2019).
+Brian 2, an intuitive and efficient neural simulator.
+\textit{eLife}, 8, e47314.
+\url{https://doi.org/10.7554/eLife.47314}
+
+\end{thebibliography}
+
+\end{document}
